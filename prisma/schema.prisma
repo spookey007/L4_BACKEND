@@ -1,0 +1,366 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  walletAddress       String               @unique
+  username            String?              @unique
+  displayName         String?
+  bio                 String?
+  avatarUrl           String?
+  avatarBlob          Bytes?
+  email               String?              @unique
+  emailOtp            String?
+  emailOtpExpiresAt   DateTime?
+  emailVerifiedAt     DateTime?
+  role                Int                  @default(1)
+  blockedUsers        String[]             @default([])
+  isVerified          Boolean              @default(false)
+  lastSeen            DateTime             @default(now())
+  mutedChannels       String[]             @default([])
+  status              String               @default("offline")
+  discordHandle       String?
+  spotifyHandle       String?
+  twitchHandle        String?
+  twitterHandle       String?
+  usernameChangedAt   DateTime?
+  channelsCreated     Channel[]            @relation("ChannelCreator")
+  dmChannels          Channel[]            @relation("ChannelUidUser")
+  channelMembers      ChannelMember[]
+  comments            Comment[]
+  following           Follow[]             @relation("UserFollowing")
+  followers           Follow[]             @relation("UserFollowers")
+  likes               Like[]
+  sentMessages        Message[]            @relation("UserMessages")
+  messageReactions    MessageReaction[]
+  notifications       Notification[]
+  pokesSent           Poke[]               @relation("UserPokesSent")
+  pokesReceived       Poke[]               @relation("UserPokesReceived")
+  posts               Post[]
+  readReceipts        ReadReceipt[]
+  roomsCreated        Room[]               @relation("RoomCreator")
+  roomInvitesCreated  RoomInvite[]         @relation("RoomInviteCreator")
+  roomInvitesUsed     RoomInvite[]         @relation("RoomInviteUsedBy")
+  roomMemberships     RoomMember[]
+  sessions            Session[]
+  stakingPositions    StakingPosition[]
+  stakingRewards      StakingReward[]
+  stakingTransactions StakingTransaction[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Nonce {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  walletAddress String
+  value         String   @unique
+
+  @@index([walletAddress])
+}
+
+model Post {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  authorId  String
+  content   String
+  comments  Comment[]
+  likes     Like[]
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  authorId  String
+  postId    String
+  content   String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  userId    String
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  followerId  String
+  followingId String
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+}
+
+model Channel {
+  id            String          @id @default(cuid())
+  name          String?
+  type          String          @default("dm")
+  createdBy     String
+  uid           String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  isPrivate     Boolean         @default(false)
+  lastMessageId String?
+  topic         String?
+  roomId        String?         @unique
+  createdByUser User            @relation("ChannelCreator", fields: [createdBy], references: [id])
+  lastMessage   Message?        @relation("ChannelLastMessage", fields: [lastMessageId], references: [id])
+  room          Room?           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  uidUser       User?           @relation("ChannelUidUser", fields: [uid], references: [id])
+  members       ChannelMember[]
+  messages      Message[]
+
+  @@index([type])
+  @@index([lastMessageId])
+}
+
+model ChannelMember {
+  id        String   @id @default(cuid())
+  channelId String
+  userId    String
+  joinedAt  DateTime @default(now())
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([channelId])
+  @@index([userId])
+}
+
+model Message {
+  id                 String            @id @default(cuid())
+  content            String
+  attachments        Json?
+  authorId           String
+  channelId          String
+  deletedAt          DateTime?
+  editedAt           DateTime?
+  isSystem           Boolean           @default(false)
+  repliedToMessageId String?
+  sentAt             DateTime          @default(now())
+  type               Int               @default(1)
+  channelLastMessage Channel[]         @relation("ChannelLastMessage")
+  author             User              @relation("UserMessages", fields: [authorId], references: [id])
+  channel            Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  repliedToMessage   Message?          @relation("MessageReplies", fields: [repliedToMessageId], references: [id])
+  replies            Message[]         @relation("MessageReplies")
+  reactions          MessageReaction[]
+  readReceipts       ReadReceipt[]
+
+  @@index([channelId, sentAt])
+  @@index([authorId])
+  @@index([repliedToMessageId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([emoji])
+}
+
+model ReadReceipt {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@index([userId])
+}
+
+model StakingTransaction {
+  id             String    @id @default(cuid())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  userId         String
+  walletAddress  String
+  solAmount      Decimal   @db.Decimal(18, 9)
+  l4Amount       Decimal   @db.Decimal(18, 9)
+  l4Price        Decimal   @db.Decimal(18, 9)
+  txHash         String    @unique
+  status         String    @default("pending")
+  confirmedAt    DateTime?
+  blockNumber    BigInt?
+  lockPeriodDays Int       @default(180)
+  apr            Decimal   @db.Decimal(5, 4)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([walletAddress])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model StakingPosition {
+  id              String    @id @default(cuid())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  userId          String
+  walletAddress   String    @unique
+  totalStaked     Decimal   @default(0) @db.Decimal(18, 9)
+  totalL4Received Decimal   @default(0) @db.Decimal(18, 9)
+  totalRewards    Decimal   @default(0) @db.Decimal(18, 9)
+  pendingRewards  Decimal   @default(0) @db.Decimal(18, 9)
+  lastStakeDate   DateTime?
+  isActive        Boolean   @default(true)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([walletAddress])
+  @@index([isActive])
+}
+
+model StakingReward {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  walletAddress String
+  rewardAmount  Decimal   @db.Decimal(18, 9)
+  claimTxHash   String?   @unique
+  claimedAt     DateTime?
+  daysStaked    Int
+  apr           Decimal   @db.Decimal(5, 4)
+  transactionId String?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([walletAddress])
+  @@index([claimedAt])
+  @@index([createdAt])
+}
+
+model Poke {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  fromUserId String
+  toUserId   String
+  message    String?
+  isRead     Boolean  @default(false)
+  fromUser   User     @relation("UserPokesSent", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User     @relation("UserPokesReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId])
+  @@index([fromUserId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    String
+  type      String
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Room {
+  id            String       @id @default(cuid())
+  name          String
+  description   String?
+  uniqueId      String       @unique
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  createdBy     String
+  isActive      Boolean      @default(true)
+  maxMembers    Int          @default(100)
+  privacy       Int          @default(1)
+  channel       Channel?
+  createdByUser User         @relation("RoomCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  invites       RoomInvite[]
+  members       RoomMember[]
+
+  @@index([privacy])
+  @@index([createdBy])
+  @@index([isActive])
+  @@index([uniqueId])
+}
+
+model RoomMember {
+  id       String         @id @default(cuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime       @default(now())
+  role     RoomMemberRole @default(MEMBER)
+  room     Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+model RoomInvite {
+  id            String    @id @default(cuid())
+  roomId        String
+  invitedBy     String
+  message       String?
+  expiresAt     DateTime?
+  isUsed        Boolean   @default(false)
+  usedAt        DateTime?
+  usedBy        String?
+  createdAt     DateTime  @default(now())
+  inviteCode    String    @unique
+  invitedByUser User      @relation("RoomInviteCreator", fields: [invitedBy], references: [id], onDelete: Cascade)
+  room          Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  usedByUser    User?     @relation("RoomInviteUsedBy", fields: [usedBy], references: [id])
+
+  @@index([roomId])
+  @@index([invitedBy])
+  @@index([isUsed])
+  @@index([expiresAt])
+  @@index([inviteCode])
+}
+
+enum RoomMemberRole {
+  OWNER
+  ADMIN
+  MODERATOR
+  MEMBER
+}

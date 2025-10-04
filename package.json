@@ -1,0 +1,43 @@
+{
+  "name": "layer4-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "postinstall": "prisma generate",
+    "lint": "eslint",
+    "set-admin": "node scripts/set-first-admin.js",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.15.0",
+    "@upstash/redis": "^1.35.4",
+    "axios": "^1.7.9",
+    "bs58": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "minio": "^8.0.6",
+    "msgpack-lite": "^0.1.26",
+    "multer": "^2.0.2",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/bs58": "^4.0.4",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^20",
+    "eslint": "^9",
+    "nodemon": "^3.1.10",
+    "prisma": "^6.15.0",
+    "typescript": "5.9.2"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  }
+}
