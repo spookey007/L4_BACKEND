@@ -72,9 +72,18 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     // Allow common file types including webm for voice recordings
-    const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|webm|mov|mp3|wav|ogg|pdf|txt|json|svg/;
-    const extname = allowedTypes.test(file.originalname.toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const allowedExtensions = /jpeg|jpg|png|gif|webp|mp4|webm|mov|mp3|wav|ogg|pdf|txt|json|svg/;
+    const allowedMimeTypes = /^image\/|^video\/|^audio\/|^application\/pdf|^text\/|^application\/json|^image\/svg\+xml/;
+    
+    const extname = allowedExtensions.test(file.originalname.toLowerCase());
+    const mimetype = allowedMimeTypes.test(file.mimetype);
+    
+    console.log('🔍 [MINIO FILTER] File check:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      extname: extname,
+      mimetypeValid: mimetype
+    });
     
     if (mimetype && extname) {
       return cb(null, true);
