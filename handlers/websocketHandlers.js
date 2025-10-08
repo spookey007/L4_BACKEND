@@ -1,6 +1,7 @@
 const { prisma } = require('../lib/prisma');
 const redis = require('../lib/redis');
 const msgpack = require('msgpack-lite');
+const notificationService = require('../lib/notificationService');
 
 // Event types
 const CLIENT_EVENTS = {
@@ -33,7 +34,10 @@ const CLIENT_EVENTS = {
   CREATE_ROOM_INVITE: 'CREATE_ROOM_INVITE',
   USE_ROOM_INVITE: 'USE_ROOM_INVITE',
   SEARCH_ROOMS: 'SEARCH_ROOMS',
-  CREATE_DM: 'CREATE_DM'
+  CREATE_DM: 'CREATE_DM',
+  GET_UNREAD_COUNTS: 'GET_UNREAD_COUNTS',
+  GET_NOTIFICATION_PREFS: 'GET_NOTIFICATION_PREFS',
+  UPDATE_NOTIFICATION_PREFS: 'UPDATE_NOTIFICATION_PREFS'
 };
 
 const SERVER_EVENTS = {
@@ -52,6 +56,10 @@ const SERVER_EVENTS = {
   MESSAGES_LOADED: 'MESSAGES_LOADED',
   CHANNEL_CREATED: 'CHANNEL_CREATED',
   NEW_DM_INVITE: 'NEW_DM_INVITE',
+  UNREAD_COUNT_UPDATE: 'UNREAD_COUNT_UPDATE',
+  NOTIFICATION_RECEIVED: 'NOTIFICATION_RECEIVED',
+  UNREAD_COUNTS_RESPONSE: 'UNREAD_COUNTS_RESPONSE',
+  NOTIFICATION_PREFS_RESPONSE: 'NOTIFICATION_PREFS_RESPONSE',
   PONG: 'PONG',
   ERROR: 'ERROR',
   AUTH_ME_RESPONSE: 'AUTH_ME_RESPONSE',
@@ -227,6 +235,9 @@ async function handleSendMessage(userId, payload, connections) {
     });
 
     await broadcastToChannel(channelId, SERVER_EVENTS.MESSAGE_RECEIVED, message, null, connections);
+    
+    // Handle notification counting and updates
+    await notificationService.handleNewMessage(message, connections);
   } catch (error) {
     console.error('❌ Error sending message:', error);
     throw error;
@@ -644,6 +655,9 @@ async function handleMarkAsRead(userId, payload) {
         readAt: new Date()
       }
     });
+    
+    // Handle notification count updates
+    await notificationService.handleMessageRead(userId, message.channelId, connections);
     
     // Reduced logging to prevent spam - only log every 10th read receipt
     if (Math.random() < 0.1) {
@@ -1161,6 +1175,83 @@ async function validateCacheVsDatabase(userId) {
   }
 }
 
+// Notification handlers
+async function handleGetUnreadCounts(userId, payload, ws) {
+  try {
+    console.log('📊 [NOTIFICATION] Getting unread counts for user:', userId);
+    
+    const channelCounts = await notificationService.getAllChannelUnreadCounts(userId);
+    const totalCount = await notificationService.getTotalUnreadCount(userId);
+    
+    ws.send(msgpack.encode([SERVER_EVENTS.UNREAD_COUNTS_RESPONSE, {
+      channelCounts,
+      totalCount,
+      timestamp: Date.now()
+    }, Date.now()]));
+    
+    console.log('📊 [NOTIFICATION] Sent unread counts:', {
+      userId,
+      totalCount,
+      channelCounts: Object.keys(channelCounts).length
+    });
+  } catch (error) {
+    console.error('❌ [NOTIFICATION] Error getting unread counts:', error);
+    ws.send(msgpack.encode([SERVER_EVENTS.ERROR, {
+      message: 'Failed to get unread counts',
+      error: error.message
+    }, Date.now()]));
+  }
+}
+
+async function handleGetNotificationPrefs(userId, payload, ws) {
+  try {
+    console.log('🔔 [NOTIFICATION] Getting notification preferences for user:', userId);
+    
+    const preferences = await notificationService.getNotificationPreferences(userId);
+    
+    ws.send(msgpack.encode([SERVER_EVENTS.NOTIFICATION_PREFS_RESPONSE, {
+      preferences,
+      timestamp: Date.now()
+    }, Date.now()]));
+    
+    console.log('🔔 [NOTIFICATION] Sent notification preferences:', {
+      userId,
+      preferences
+    });
+  } catch (error) {
+    console.error('❌ [NOTIFICATION] Error getting notification preferences:', error);
+    ws.send(msgpack.encode([SERVER_EVENTS.ERROR, {
+      message: 'Failed to get notification preferences',
+      error: error.message
+    }, Date.now()]));
+  }
+}
+
+async function handleUpdateNotificationPrefs(userId, payload, ws) {
+  try {
+    const { preferences } = payload;
+    console.log('🔔 [NOTIFICATION] Updating notification preferences for user:', userId, preferences);
+    
+    await notificationService.updateNotificationPreferences(userId, preferences);
+    
+    ws.send(msgpack.encode([SERVER_EVENTS.NOTIFICATION_PREFS_RESPONSE, {
+      preferences,
+      timestamp: Date.now()
+    }, Date.now()]));
+    
+    console.log('🔔 [NOTIFICATION] Updated notification preferences:', {
+      userId,
+      preferences
+    });
+  } catch (error) {
+    console.error('❌ [NOTIFICATION] Error updating notification preferences:', error);
+    ws.send(msgpack.encode([SERVER_EVENTS.ERROR, {
+      message: 'Failed to update notification preferences',
+      error: error.message
+    }, Date.now()]));
+  }
+}
+
 module.exports = {
   CLIENT_EVENTS,
   SERVER_EVENTS,
@@ -1190,6 +1281,9 @@ module.exports = {
   handleUseRoomInvite,
   handleSearchRooms,
   handleCreateDM,
+  handleGetUnreadCounts,
+  handleGetNotificationPrefs,
+  handleUpdateNotificationPrefs,
   clearAllChannelCaches,
   validateCacheVsDatabase
 };

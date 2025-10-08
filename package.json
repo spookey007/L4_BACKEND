@@ -1,5 +1,5 @@
 {
-  "name": "layer4-backend",
+  "name": "dcoin-backend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -22,6 +22,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "minio": "^8.0.6",
     "msgpack-lite": "^0.1.26",
     "multer": "^2.0.2",
